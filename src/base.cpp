@@ -69,7 +69,9 @@ ucs_status_t Base::run_client(sockaddr_in address) {
     // Prepare endpoint parameters
     ucp_ep_params_t endpoint_parameters {
             .field_mask  = UCP_EP_PARAM_FIELD_FLAGS |
-                           UCP_EP_PARAM_FIELD_SOCK_ADDR,
+                           UCP_EP_PARAM_FIELD_SOCK_ADDR|
+                           UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE,
+            .err_mode    = UCP_ERR_HANDLING_MODE_PEER,
             .flags       = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER |
                            UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID,
             .sockaddr {
@@ -125,7 +127,9 @@ ucs_status_t Base::run_server(sockaddr_in address) {
 
     // Prepare endpoint parameters
     ucp_ep_params_t endpoint_parameters {
-            .field_mask   = UCP_EP_PARAM_FIELD_CONN_REQUEST,
+            .field_mask   = UCP_EP_PARAM_FIELD_CONN_REQUEST |
+                            UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE,
+            .err_mode     = UCP_ERR_HANDLING_MODE_PEER,
             .conn_request = connection_request.load()
     };
 
@@ -140,37 +144,41 @@ ucs_status_t Base::run_server(sockaddr_in address) {
 
 void Base::cleanup() {
 
-    // Close endpoint
-    if (endpoint != nullptr) {
-        ucp_request_param_t request_params {};
-        if (auto status = wait_on_request(ucp_ep_close_nbx(endpoint, &request_params)); status != UCS_OK) {
-            ucs_error("Closing endpoint failed with error %s", ucs_status_string(status));
-        }
+// Close endpoint
+if (endpoint != nullptr) {
+    ucp_request_param_t request_params {
+            .op_attr_mask   = UCP_OP_ATTR_FIELD_FLAGS,
+            .flags          = UCP_EP_CLOSE_FLAG_FORCE
+    };
 
-        endpoint = nullptr;
-        ucs_info("Endpoint closed");
+    if (auto status = wait_on_request(ucp_ep_close_nbx(endpoint, &request_params)); status != UCS_OK) {
+        ucs_error("Force-closing endpoint failed with error %s", ucs_status_string(status));
     }
 
-    // Close listener
-    if (listener != nullptr) {
-        ucp_listener_destroy(listener);
-        listener = nullptr;
-        ucs_info("Listener closed");
-    }
+    endpoint = nullptr;
+    ucs_info("Endpoint closed");
+}
 
-    // Close worker
-    if (worker != nullptr) {
-        ucp_worker_destroy(worker);
-        worker = nullptr;
-        ucs_info("Worker closed");
-    }
+// Close listener
+if (listener != nullptr) {
+    ucp_listener_destroy(listener);
+    listener = nullptr;
+    ucs_info("Listener closed");
+}
 
-    // Close context
-    if (context != nullptr) {
-        ucp_cleanup(context);
-        context = nullptr;
-        ucs_info("Context closed");
-    }
+// Close worker
+if (worker != nullptr) {
+    ucp_worker_destroy(worker);
+    worker = nullptr;
+    ucs_info("Worker closed");
+}
+
+// Close context
+if (context != nullptr) {
+    ucp_cleanup(context);
+    context = nullptr;
+    ucs_info("Context closed");
+}
 }
 
 ucs_status_t Base::wait_on_request(ucs_status_ptr_t request) {

@@ -31,21 +31,19 @@ int main(int argc, char** argv) {
     auto demo = new Messaging();
     if (strcmp(argv[1], "server") == 0) {
         // Server goes through run-cleanup cycle until error
-        while (true) {
-            if (auto status = demo->run(Base::Mode::Server, socket_address); status != UCS_OK) {
-                break;
-            }
-
+        ucs_status_t status = UCS_OK;
+        while (status == UCS_OK) {
+            status = demo->run(Base::Mode::Server, socket_address);
             demo->cleanup();
         }
     } else if (strcmp(argv[1], "client") == 0) {
-        // Client connects with server once and exits program
-        demo->run(Base::Mode::Client, socket_address);
+        // Client connects with server ten times and exits program
+        for (auto i = 0; i < 10; i++) {
+            demo->run(Base::Mode::Client, socket_address);
+            demo->cleanup();
+        }
     }
 
-    // Cleanup resources
-    demo->cleanup();
     delete demo;
-
     return 0;
 }
