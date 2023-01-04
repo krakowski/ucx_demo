@@ -30,18 +30,34 @@ int main(int argc, char** argv) {
     // Start client or server
     auto demo = new Messaging();
     if (strcmp(argv[1], "server") == 0) {
-        // Server goes through run-cleanup cycle until error
-        ucs_status_t status = UCS_OK;
-        while (status == UCS_OK) {
-            status = demo->run(Base::Mode::Server, socket_address);
-            demo->cleanup();
+        // Initialize all UCX resources (context, worker, listener), wait for incoming
+        // connection requests, create an endpoint once a request arrives and receive a single
+        // message using ucp_tag_recv_nbx.
+        if (auto status = demo->run(Base::Mode::Server, socket_address); status == UCS_OK) {
+            ucs_info("First run successful");
         }
+
+        // Close connection and cleanup all resources (endpoint, listener, worker, context).
+        demo->cleanup();
+
+        // Try to initialize all UCX resources again after they've been cleaned up.
+        if (auto status = demo->run(Base::Mode::Server, socket_address); status != UCS_OK) {
+            ucs_error("Second run failed with error %s", ucs_status_string(status));
+        }
+
+        // Close connection and cleanup all resources (endpoint, listener, worker, context).
+        demo->cleanup();
     } else if (strcmp(argv[1], "client") == 0) {
-        // Client connects with server ten times and exits program
-        for (auto i = 0; i < 10; i++) {
-            demo->run(Base::Mode::Client, socket_address);
-            demo->cleanup();
-        }
+        // Client connects with server, then sleeps 1 second. During this time
+        // (specifically before the client closes its connection) the server closes
+        // its listener and tries to reopen it, which fails.
+        demo->run(Base::Mode::Client, socket_address);
+
+        // Sleep for one second, during which the server closes its connection.
+        sleep(1);
+
+        // Close connection and cleanup all resources (endpoint, listener, worker, context).
+        demo->cleanup();
     }
 
     delete demo;
